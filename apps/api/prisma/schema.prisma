@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
+model Category {
+  id          String    @id
+  label       String
+  description String?
+  image       String?
+  sortOrder   Int       @default(0)
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+model Product {
+  id          String      @id
+  name        String
+  description String
+  price       Int
+  unit        String
+  categoryId  String
+  cut         String
+  image       String
+  badge       String?
+  popular     Boolean     @default(false)
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  category    Category    @relation(fields: [categoryId], references: [id])
+  orderItems  OrderItem[]
+
+  @@index([categoryId])
+}
+
+model Order {
+  id                 String      @id @default(cuid())
+  invoiceNumber      String?     @unique
+  customerId         String?
+  customerName       String
+  phone              String
+  address            String
+  note               String?
+  status             OrderStatus @default(PENDING)
+  subtotal           Int         @default(0)
+  deliveryFee        Int         @default(0)
+  total              Int
+  /// cash | points | mixed
+  paymentMethod      String      @default("cash")
+  pointsRedeemed     Int         @default(0)
+  pointsDiscount     Int         @default(0)
+  /// Montant à payer à la livraison (après points)
+  amountDue          Int         @default(0)
+  courierId          String?
+  courierName        String?
+  courierPhone       String?
+  zoneId             String?
+  zoneName           String?
+  distanceMeters     Int?
+  durationSeconds    Int?
+  prepSeconds        Int         @default(480)
+  estimatedArrivalAt DateTime?
+  destLat            Float?
+  destLng            Float?
+  storeLat           Float?
+  storeLng           Float?
+  courierLat         Float?
+  courierLng         Float?
+  courierLocationAt  DateTime?
+  etaSource          String?
+  mapsUrl            String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  customer           Customer?   @relation(fields: [customerId], references: [id])
+  courier            Courier?    @relation(fields: [courierId], references: [id])
+  zone               DeliveryZone? @relation(fields: [zoneId], references: [id])
+  items              OrderItem[]
+
+  @@index([customerId])
+  @@index([phone])
+  @@index([courierId])
+  @@index([zoneId])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String
+  quantity    Int
+  unitPrice   Int
+  productName String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String   @unique
+  email        String?  @unique
+  passwordHash String
+  address      String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  orders       Order[]
+}
+
+model AdminAccount {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  name         String
+  passwordHash String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AdminAuthSettings {
+  id                 String   @id @default("main")
+  googleClientId     String   @default("")
+  googleClientSecret String   @default("")
+  googleAllowedEmails String  @default("")
+  updatedAt          DateTime @updatedAt
+}
+
+model Courier {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @unique
+  active    Boolean  @default(true)
+  available Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+model DeliveryZone {
+  id               String   @id @default(cuid())
+  name             String
+  keywords         String
+  fee              Int      @default(0)
+  durationMinutes  Int      @default(25)
+  prepMinutes      Int      @default(8)
+  active           Boolean  @default(true)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  orders           Order[]
+}
+
+model DeliverySettings {
+  id                     String @id @default("main")
+  defaultPrepMinutes     Int    @default(8)
+  defaultDurationMinutes Int    @default(25)
+  defaultFee             Int    @default(0)
+  useMapsEstimate        Boolean @default(true)
+  updatedAt              DateTime @updatedAt
+}
+
+model LoyaltyAccount {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  points    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SiteContent {
+  id              String   @id @default("main")
+  brandName       String   @default("Reine Univers Business")
+  heroTitle       String
+  heroSubtitle    String
+  ctaLabel        String   @default("Commander")
+  deliveryEyebrow String   @default("Livraison")
+  deliveryTitle   String
+  deliveryText    String
+  deliveryFast    String
+  deliveryHours   String
+  deliveryZones   String
+  loyaltyEyebrow  String   @default("Fidélité")
+  loyaltyTitle    String
+  loyaltyText     String
+  phone           String
+  whatsapp        String
+  email           String
+  updatedAt       DateTime @updatedAt
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  message   String
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,15 @@
+node_modules
+dist
+.nuxt
+.output
+.vercel
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage
+apps/api/dist
+apps/web/.nuxt
+apps/web/.output
+apps/web/.vercel

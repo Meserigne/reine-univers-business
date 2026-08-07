@@ -1,0 +1,36 @@
+@import "tailwindcss";
+@import "@fontsource-variable/outfit";
+@import "@fontsource-variable/dm-sans";
+
+@theme {
+  --font-display: "Outfit Variable", sans-serif;
+  --font-body: "DM Sans Variable", sans-serif;
+
+  --color-brand: #c8102e;
+  --color-brand-dark: #9e0c24;
+  --color-brand-soft: #fde8eb;
+  --color-ink: #141414;
+  --color-ink-muted: #5c5c5c;
+  --color-surface: #ffffff;
+  --color-canvas: #f7f7f8;
+  --color-line: #e8e8ea;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    color: var(--color-ink);
+    background: var(--color-canvas);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-brand);
+    color: white;
+  }
+}

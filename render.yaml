@@ -1,0 +1,58 @@
+# Reine Univers Business — API + Postgres on Render
+# Frontend (Nuxt) is deployed separately on Vercel.
+services:
+  - type: web
+    name: rub-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: .
+    buildCommand: npm install && npm run prisma:generate --workspace=api && npm run build --workspace=api
+    startCommand: npm run prisma:deploy --workspace=api && npm run start:prod --workspace=api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rub-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_BOOTSTRAP_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@reineunivers.sn
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: Administrateur
+      - key: CORS_ORIGIN
+        sync: false
+      - key: ADMIN_WEB_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_ADMIN_CALLBACK_URL
+        sync: false
+      - key: ADMIN_GOOGLE_EMAILS
+        sync: false
+      - key: STORE_LAT
+        value: "14.7167"
+      - key: STORE_LNG
+        value: "-17.4677"
+      - key: STORE_ADDRESS
+        value: "Dakar, Sénégal"
+      - key: DELIVERY_PREP_SECONDS
+        value: "480"
+
+databases:
+  - name: rub-db
+    plan: free
+    region: frankfurt
+    databaseName: reine_univers
+    postgresMajorVersion: "16"
