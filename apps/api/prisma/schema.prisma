@@ -10,8 +10,25 @@ datasource db {
 enum OrderStatus {
   PENDING
   CONFIRMED
+  PREPARING
+  OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum NotificationEvent {
+  ORDER_PLACED
+  ORDER_PREPARING
+  COURIER_DEPARTED
+  ORDER_DELIVERED
+  ORDER_CANCELLED
 }
 
 model Category {
@@ -80,6 +97,11 @@ model Order {
   courierLat         Float?
   courierLng         Float?
   courierLocationAt  DateTime?
+  /// Token secret pour le mode livreur GPS (partagé via lien /livreur)
+  trackingToken      String?     @unique
+  preparingAt        DateTime?
+  departedAt         DateTime?
+  deliveredAt        DateTime?
   etaSource          String?
   mapsUrl            String?
   createdAt          DateTime    @default(now())
@@ -88,11 +110,53 @@ model Order {
   courier            Courier?    @relation(fields: [courierId], references: [id])
   zone               DeliveryZone? @relation(fields: [zoneId], references: [id])
   items              OrderItem[]
+  notifications      Notification[]
 
   @@index([customerId])
   @@index([phone])
   @@index([courierId])
   @@index([zoneId])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  orderId   String?
+  customerId String?
+  phone     String?
+  email     String?
+  event     NotificationEvent
+  channel   NotificationChannel
+  title     String
+  body      String
+  /// pending | sent | failed | read
+  status    String              @default("pending")
+  error     String?
+  meta      String              @default("{}")
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+  order     Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customer  Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([customerId])
+  @@index([phone])
+  @@index([event])
+  @@index([status])
+}
+
+model NotificationSettings {
+  id              String  @id @default("main")
+  emailEnabled    Boolean @default(true)
+  smsEnabled      Boolean @default(true)
+  pushEnabled     Boolean @default(true)
+  inAppEnabled    Boolean @default(true)
+  notifyPlaced    Boolean @default(true)
+  notifyPreparing Boolean @default(true)
+  notifyDeparted  Boolean @default(true)
+  notifyDelivered Boolean @default(true)
+  notifyCancelled Boolean @default(true)
+  updatedAt       DateTime @updatedAt
 }
 
 model OrderItem {
@@ -117,9 +181,12 @@ model Customer {
   passwordHash String
   address      String?
   active       Boolean  @default(true)
+  /// Token FCM / APNs pour apps mobiles (JSON array)
+  pushTokens   String   @default("[]")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   orders       Order[]
+  notifications Notification[]
 }
 
 model AdminAccount {

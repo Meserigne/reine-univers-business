@@ -40,7 +40,13 @@ export type AdminOrder = {
   phone: string
   address: string
   note: string | null
-  status: 'PENDING' | 'CONFIRMED' | 'DELIVERED' | 'CANCELLED'
+  status:
+    | 'PENDING'
+    | 'CONFIRMED'
+    | 'PREPARING'
+    | 'OUT_FOR_DELIVERY'
+    | 'DELIVERED'
+    | 'CANCELLED'
   total: number
   subtotal?: number
   deliveryFee?: number
@@ -53,6 +59,8 @@ export type AdminOrder = {
   prepSeconds?: number
   durationSeconds?: number | null
   estimatedArrivalAt?: string | null
+  trackingToken?: string | null
+  livreurPath?: string
   items: {
     id: string
     productId: string
@@ -267,5 +275,44 @@ export function useAdminApi() {
       googleClientSecret?: string
       googleAllowedEmails?: string
     }) => api(`${base}/auth-settings`, { method: 'PATCH', body }),
+    notifications: () =>
+      api<
+        {
+          id: string
+          event: string
+          channel: string
+          title: string
+          body: string
+          status: string
+          phone: string | null
+          email: string | null
+          createdAt: string
+        }[]
+      >(`${base}/notifications`),
+    notificationSettings: () =>
+      api<{
+        emailEnabled: boolean
+        smsEnabled: boolean
+        pushEnabled: boolean
+        inAppEnabled: boolean
+        notifyPlaced: boolean
+        notifyPreparing: boolean
+        notifyDeparted: boolean
+        notifyDelivered: boolean
+        notifyCancelled: boolean
+      }>(`${base}/notification-settings`),
+    updateNotificationSettings: (
+      body: Partial<{
+        emailEnabled: boolean
+        smsEnabled: boolean
+        pushEnabled: boolean
+        inAppEnabled: boolean
+        notifyPlaced: boolean
+        notifyPreparing: boolean
+        notifyDeparted: boolean
+        notifyDelivered: boolean
+        notifyCancelled: boolean
+      }>,
+    ) => api(`${base}/notification-settings`, { method: 'PATCH', body }),
   }
 }

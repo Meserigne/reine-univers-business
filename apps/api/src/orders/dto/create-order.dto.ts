@@ -98,4 +98,8 @@ export class UpdateCourierLocationDto {
   @Min(-180)
   @Max(180)
   courierLng!: number;
+
+  @IsOptional()
+  @IsString()
+  token?: string;
 }

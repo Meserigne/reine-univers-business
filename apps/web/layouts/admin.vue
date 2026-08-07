@@ -14,6 +14,7 @@ import {
   PhList,
   PhX,
   PhUserGear,
+  PhBell,
 } from '@phosphor-icons/vue'
 
 useHead({ title: 'Admin — Reine Univers Business' })
@@ -41,6 +42,7 @@ const links = [
   { to: '/admin/messages', label: 'Messages', icon: PhEnvelope },
   { to: '/admin/fidelite', label: 'Fidélité', icon: PhStar },
   { to: '/admin/comptes', label: 'Comptes', icon: PhUserGear },
+  { to: '/admin/notifications', label: 'Notifications', icon: PhBell },
 ]
 
 function isActive(to: string, exact?: boolean) {

@@ -31,6 +31,8 @@ const createdLinks = ref<{ id: string; invoiceNumber?: string | null } | null>(n
 const statuses = [
   { id: 'ALL', label: 'Toutes' },
   { id: 'PENDING', label: 'En attente' },
+  { id: 'PREPARING', label: 'Préparation' },
+  { id: 'OUT_FOR_DELIVERY', label: 'En livraison' },
   { id: 'CONFIRMED', label: 'Confirmées' },
   { id: 'DELIVERED', label: 'Livrées' },
   { id: 'CANCELLED', label: 'Annulées' },
@@ -64,16 +66,20 @@ const filtered = computed(() => {
   return orders.value.filter((o) => o.status === statusFilter.value)
 })
 
-const statusLabel: Record<AdminOrder['status'], string> = {
+const statusLabel: Record<string, string> = {
   PENDING: 'En attente',
   CONFIRMED: 'Confirmée',
+  PREPARING: 'Préparation',
+  OUT_FOR_DELIVERY: 'En livraison',
   DELIVERED: 'Livrée',
   CANCELLED: 'Annulée',
 }
 
-const statusClass: Record<AdminOrder['status'], string> = {
+const statusClass: Record<string, string> = {
   PENDING: 'bg-amber-50 text-amber-800',
   CONFIRMED: 'bg-sky-50 text-sky-800',
+  PREPARING: 'bg-orange-50 text-orange-800',
+  OUT_FOR_DELIVERY: 'bg-indigo-50 text-indigo-800',
   DELIVERED: 'bg-emerald-50 text-emerald-800',
   CANCELLED: 'bg-canvas text-ink-muted',
 }
@@ -375,14 +381,14 @@ function formatDate(iso: string) {
               Suivi livraison
             </NuxtLink>
             <NuxtLink
-              :to="`/livreur/${order.id}`"
+              :to="order.livreurPath || `/livreur/${order.id}`"
               target="_blank"
               class="rounded-xl border border-line px-3 py-1.5 text-xs font-semibold text-teal-800"
             >
               Mode livreur GPS
             </NuxtLink>
             <button
-              v-for="s in (['PENDING', 'CONFIRMED', 'DELIVERED', 'CANCELLED'] as const)"
+              v-for="s in (['PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'] as const)"
               :key="s"
               type="button"
               class="rounded-xl px-3 py-1.5 text-xs font-semibold"

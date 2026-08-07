@@ -147,7 +147,13 @@ export class UpdateProductDto {
 
 export class UpdateOrderStatusDto {
   @IsString()
-  status!: 'PENDING' | 'CONFIRMED' | 'DELIVERED' | 'CANCELLED';
+  status!:
+    | 'PENDING'
+    | 'CONFIRMED'
+    | 'PREPARING'
+    | 'OUT_FOR_DELIVERY'
+    | 'DELIVERED'
+    | 'CANCELLED';
 }
 
 export class UpdateSiteContentDto {
@@ -218,7 +224,7 @@ export class UpdateOrderTrackingDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) durationSeconds?: number;
   @IsOptional() @Type(() => Number) @IsInt() addMinutes?: number;
   @IsOptional() @IsString() estimatedArrivalAt?: string;
-  @IsOptional() @IsString() status?: 'PENDING' | 'CONFIRMED' | 'DELIVERED' | 'CANCELLED';
+  @IsOptional() @IsString() status?: 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'CANCELLED';
   @IsOptional() @IsBoolean() markDeparted?: boolean;
   @IsOptional() @IsBoolean() markArrived?: boolean;
 }

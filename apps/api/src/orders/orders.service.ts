@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -12,6 +13,9 @@ import {
   POINT_VALUE_FCFA,
   pointsFromAmount,
 } from '../loyalty/loyalty.constants';
+import { NotificationsService } from '../notifications/notifications.service';
+import { TrackingEventsService } from './tracking-events.service';
+import type { OrderStatus } from '@prisma/client';
 
 @Injectable()
 export class OrdersService {
@@ -19,6 +23,8 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly loyaltyService: LoyaltyService,
     private readonly deliveryService: DeliveryService,
+    private readonly notifications: NotificationsService,
+    private readonly trackingEvents: TrackingEventsService,
   ) {}
 
   async create(dto: CreateOrderDto) {
@@ -105,7 +111,9 @@ export class OrdersService {
         pointsRedeemed,
         pointsDiscount,
         amountDue,
-        status: 'CONFIRMED',
+        status: 'PREPARING',
+        preparingAt: new Date(),
+        trackingToken: this.notifications.newTrackingToken(),
         courierId: courier.id,
         courierName: courier.name,
         courierPhone: courier.phone,
@@ -141,7 +149,15 @@ export class OrdersService {
       await this.loyaltyService.earn(phone, earned);
     }
 
-    return this.toTrackingPayload(order);
+    const payload = this.toTrackingPayload(order);
+    void this.notifications.notifyOrderEvent('ORDER_PLACED', order);
+    void this.notifications.notifyOrderEvent('ORDER_PREPARING', order);
+    this.trackingEvents.emit({
+      orderId: order.id,
+      type: 'status',
+      payload: payload as unknown as Record<string, unknown>,
+    });
+    return payload;
   }
 
   async findOne(id: string) {
@@ -244,17 +260,18 @@ export class OrdersService {
   async getTracking(id: string) {
     let order = await this.findOne(id);
 
+    // Don't auto-deliver silently without notification — only when already out for delivery and ETA passed
     if (
       order.estimatedArrivalAt &&
-      order.status !== 'DELIVERED' &&
-      order.status !== 'CANCELLED' &&
+      order.status === 'OUT_FOR_DELIVERY' &&
       order.estimatedArrivalAt.getTime() <= Date.now()
     ) {
       order = await this.prisma.order.update({
         where: { id },
-        data: { status: 'DELIVERED' },
+        data: { status: 'DELIVERED', deliveredAt: new Date() },
         include: { items: true },
       });
+      void this.notifications.notifyOrderEvent('ORDER_DELIVERED', order);
     }
 
     return this.toTrackingPayload(order);
@@ -298,6 +315,7 @@ export class OrdersService {
     id: string,
     courierLat: number,
     courierLng: number,
+    token?: string,
   ) {
     const order = await this.findOne(id);
     if (order.status === 'DELIVERED' || order.status === 'CANCELLED') {
@@ -305,6 +323,14 @@ export class OrdersService {
         'Impossible de mettre à jour la position sur une commande terminée',
       );
     }
+    if (order.trackingToken && token !== order.trackingToken) {
+      throw new UnauthorizedException('Lien livreur invalide ou expiré');
+    }
+
+    const wasPreparing =
+      order.status === 'PREPARING' ||
+      order.status === 'CONFIRMED' ||
+      order.status === 'PENDING';
 
     const updated = await this.prisma.order.update({
       where: { id },
@@ -312,14 +338,26 @@ export class OrdersService {
         courierLat,
         courierLng,
         courierLocationAt: new Date(),
-        // Departure implied when courier starts sharing
         prepSeconds: order.prepSeconds > 0 ? 0 : order.prepSeconds,
-        status: order.status === 'PENDING' ? 'CONFIRMED' : order.status,
+        status: wasPreparing ? 'OUT_FOR_DELIVERY' : order.status,
+        departedAt: wasPreparing
+          ? order.departedAt ?? new Date()
+          : order.departedAt,
       },
       include: { items: true },
     });
 
-    return this.toTrackingPayload(updated);
+    if (wasPreparing && updated.status === 'OUT_FOR_DELIVERY') {
+      void this.notifications.notifyOrderEvent('COURIER_DEPARTED', updated);
+    }
+
+    const payload = this.toTrackingPayload(updated);
+    this.trackingEvents.emit({
+      orderId: id,
+      type: 'courier_gps',
+      payload: payload as unknown as Record<string, unknown>,
+    });
+    return payload;
   }
 
   async updateTracking(
@@ -330,13 +368,19 @@ export class OrdersService {
       durationSeconds?: number;
       addMinutes?: number;
       estimatedArrivalAt?: string;
-      status?: 'PENDING' | 'CONFIRMED' | 'DELIVERED' | 'CANCELLED';
+      status?: OrderStatus;
       markDeparted?: boolean;
       markArrived?: boolean;
     },
   ) {
     const order = await this.findOne(id);
     const patch: Record<string, unknown> = {};
+    let notifyEvent:
+      | 'ORDER_PREPARING'
+      | 'COURIER_DEPARTED'
+      | 'ORDER_DELIVERED'
+      | 'ORDER_CANCELLED'
+      | null = null;
 
     if (data.courierId) {
       const courier = await this.prisma.courier.findUnique({
@@ -372,21 +416,42 @@ export class OrdersService {
       const travel = order.durationSeconds || 0;
       patch.prepSeconds = 0;
       arrival = Date.now() + travel * 1000;
-      patch.status = 'CONFIRMED';
+      patch.status = 'OUT_FOR_DELIVERY';
+      patch.departedAt = new Date();
       if (order.storeLat != null && order.storeLng != null) {
         patch.courierLat = order.storeLat;
         patch.courierLng = order.storeLng;
         patch.courierLocationAt = new Date();
       }
+      notifyEvent = 'COURIER_DEPARTED';
     }
 
     // Mark arrived: countdown done
     if (data.markArrived) {
       arrival = Date.now();
       patch.status = 'DELIVERED';
+      patch.deliveredAt = new Date();
+      notifyEvent = 'ORDER_DELIVERED';
     }
 
-    if (data.status) patch.status = data.status;
+    if (data.status) {
+      patch.status = data.status;
+      if (data.status === 'PREPARING') {
+        patch.preparingAt = new Date();
+        notifyEvent = 'ORDER_PREPARING';
+      }
+      if (data.status === 'OUT_FOR_DELIVERY') {
+        patch.departedAt = order.departedAt ?? new Date();
+        notifyEvent = 'COURIER_DEPARTED';
+      }
+      if (data.status === 'DELIVERED') {
+        patch.deliveredAt = new Date();
+        notifyEvent = 'ORDER_DELIVERED';
+      }
+      if (data.status === 'CANCELLED') {
+        notifyEvent = 'ORDER_CANCELLED';
+      }
+    }
 
     patch.estimatedArrivalAt = new Date(arrival);
 
@@ -408,12 +473,31 @@ export class OrdersService {
       patch.estimatedArrivalAt = new Date(Date.now() + (prep + dur) * 1000);
     }
 
+    if (!order.trackingToken) {
+      patch.trackingToken = this.notifications.newTrackingToken();
+    }
+
     const updated = await this.prisma.order.update({
       where: { id },
       data: patch,
       include: { items: true },
     });
-    return this.toTrackingPayload(updated);
+
+    if (notifyEvent) {
+      void this.notifications.notifyOrderEvent(notifyEvent, updated);
+    }
+
+    const payload = this.toTrackingPayload(updated);
+    this.trackingEvents.emit({
+      orderId: id,
+      type: 'status',
+      payload: payload as unknown as Record<string, unknown>,
+    });
+    return payload;
+  }
+
+  async applyStatus(id: string, status: OrderStatus) {
+    return this.updateTracking(id, { status });
   }
 
   private toTrackingPayload(order: {
@@ -448,9 +532,13 @@ export class OrdersService {
     courierLat?: number | null;
     courierLng?: number | null;
     courierLocationAt?: Date | null;
+    trackingToken?: string | null;
+    preparingAt?: Date | null;
+    departedAt?: Date | null;
+    deliveredAt?: Date | null;
     createdAt: Date;
     items: unknown;
-  }) {
+  }, options?: { includeToken?: boolean }) {
     const now = Date.now();
     const arrival = order.estimatedArrivalAt?.getTime() ?? now;
     const totalWindow =
@@ -473,15 +561,49 @@ export class OrdersService {
         ? 'delivered'
         : order.status === 'CANCELLED'
           ? 'cancelled'
-          : remainingSeconds > (order.durationSeconds ?? 0)
-            ? 'preparing'
-            : 'on_the_way';
+          : order.status === 'OUT_FOR_DELIVERY'
+            ? 'on_the_way'
+            : order.status === 'PREPARING' || order.status === 'CONFIRMED'
+              ? 'preparing'
+              : remainingSeconds > (order.durationSeconds ?? 0)
+                ? 'preparing'
+                : 'on_the_way';
+
+    const steps = [
+      {
+        key: 'placed',
+        label: 'Commande reçue',
+        done: true,
+        at: order.createdAt,
+      },
+      {
+        key: 'preparing',
+        label: 'En préparation',
+        done: ['PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CONFIRMED'].includes(
+          order.status,
+        ),
+        at: order.preparingAt ?? null,
+      },
+      {
+        key: 'departed',
+        label: 'Livreur en route',
+        done: ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status),
+        at: order.departedAt ?? null,
+      },
+      {
+        key: 'delivered',
+        label: 'Livrée',
+        done: order.status === 'DELIVERED',
+        at: order.deliveredAt ?? null,
+      },
+    ];
 
     return {
       id: order.id,
       invoiceNumber: order.invoiceNumber ?? null,
       status: order.status,
       phase,
+      steps,
       customerName: order.customerName,
       address: order.address,
       phone: order.phone,
@@ -525,6 +647,14 @@ export class OrdersService {
       courierLocationAt: order.courierLocationAt ?? null,
       hasGps: order.etaSource === 'gps',
       courierLive: order.courierLat != null && order.courierLng != null,
+      livreurPath:
+        options?.includeToken && order.trackingToken
+          ? `/livreur/${order.id}?token=${order.trackingToken}`
+          : undefined,
+      trackingToken: options?.includeToken ? order.trackingToken : undefined,
+      preparingAt: order.preparingAt ?? null,
+      departedAt: order.departedAt ?? null,
+      deliveredAt: order.deliveredAt ?? null,
       items: order.items,
       createdAt: order.createdAt,
     };

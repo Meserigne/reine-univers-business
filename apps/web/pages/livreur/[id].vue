@@ -12,6 +12,7 @@ definePageMeta({ layout: 'default' })
 
 const route = useRoute()
 const orderId = computed(() => String(route.params.id || ''))
+const token = computed(() => String(route.query.token || ''))
 const { getOrderTracking, updateCourierLocation } = useApi()
 
 const { data: initial, error } = await useAsyncData(
@@ -43,6 +44,7 @@ async function push(lat: number, lng: number) {
     tracking.value = await updateCourierLocation(orderId.value, {
       courierLat: lat,
       courierLng: lng,
+      token: token.value || undefined,
     })
     lastSent.value = new Intl.DateTimeFormat('fr-FR', {
       hour: '2-digit',
@@ -50,8 +52,12 @@ async function push(lat: number, lng: number) {
       second: '2-digit',
     }).format(new Date())
     shareError.value = ''
-  } catch {
-    shareError.value = 'Envoi de la position impossible'
+  } catch (e: unknown) {
+    const err = e as { statusCode?: number; data?: { message?: string } }
+    shareError.value =
+      err?.statusCode === 401
+        ? 'Lien livreur invalide — demandez un nouveau lien à l’admin'
+        : err?.data?.message || 'Envoi de la position impossible'
   }
 }
 

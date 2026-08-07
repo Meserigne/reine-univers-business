@@ -8,6 +8,7 @@ import { PagesModule } from './pages/pages.module';
 import { ContactModule } from './contact/contact.module';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -21,6 +22,7 @@ import { HealthController } from './health.controller';
     ContactModule,
     AdminModule,
     AuthModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
 })

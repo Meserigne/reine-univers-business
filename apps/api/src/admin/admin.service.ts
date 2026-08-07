@@ -132,7 +132,14 @@ export class AdminService {
     return this.prisma.order.findMany({
       include: { items: true },
       orderBy: { createdAt: 'desc' },
-    });
+    }).then((orders) =>
+      orders.map((o) => ({
+        ...o,
+        livreurPath: o.trackingToken
+          ? `/livreur/${o.id}?token=${o.trackingToken}`
+          : `/livreur/${o.id}`,
+      })),
+    );
   }
 
   createOrder(dto: {
@@ -187,15 +194,7 @@ export class AdminService {
   }
 
   async updateOrderStatus(id: string, status: OrderStatus) {
-    try {
-      return await this.prisma.order.update({
-        where: { id },
-        data: { status },
-        include: { items: true },
-      });
-    } catch {
-      throw new NotFoundException(`Order ${id} not found`);
-    }
+    return this.ordersService.applyStatus(id, status);
   }
 
   getContent() {

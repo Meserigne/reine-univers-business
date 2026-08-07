@@ -76,12 +76,23 @@ export function useApi() {
 
   async function updateCourierLocation(
     id: string,
-    coords: { courierLat: number; courierLng: number },
+    coords: { courierLat: number; courierLng: number; token?: string },
   ) {
-    return $fetch<OrderTracking>(`${base}/orders/${id}/courier-location`, {
+    const q = coords.token
+      ? `?token=${encodeURIComponent(coords.token)}`
+      : ''
+    return $fetch<OrderTracking>(`${base}/orders/${id}/courier-location${q}`, {
       method: 'PATCH',
-      body: coords,
+      body: {
+        courierLat: coords.courierLat,
+        courierLng: coords.courierLng,
+        token: coords.token,
+      },
     })
+  }
+
+  function trackingStreamUrl(id: string) {
+    return `${base}/orders/${id}/tracking/stream`
   }
 
   async function getLoyalty(phone: string) {
@@ -113,6 +124,7 @@ export function useApi() {
     getOrderTracking,
     updateOrderLocation,
     updateCourierLocation,
+    trackingStreamUrl,
     getLoyalty,
     sendContact,
   }

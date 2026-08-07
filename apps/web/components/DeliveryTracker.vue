@@ -16,7 +16,7 @@ const props = defineProps<{
   compact?: boolean
 }>()
 
-const { getOrderTracking, updateOrderLocation } = useApi()
+const { getOrderTracking, updateOrderLocation, trackingStreamUrl } = useApi()
 
 const tracking = ref<OrderTracking | null>(props.initial ?? null)
 const error = ref('')
@@ -24,6 +24,7 @@ const loading = ref(!props.initial)
 const sharing = ref(false)
 const shareError = ref('')
 let watchId: number | null = null
+let es: EventSource | null = null
 
 async function refresh() {
   try {
@@ -88,22 +89,50 @@ const canShareLive = computed(
 let poll: ReturnType<typeof setInterval> | null = null
 function startPoll() {
   if (poll) clearInterval(poll)
-  const ms = tracking.value?.courierLive ? 4000 : 8000
+  // Fallback poll if SSE unavailable
+  const ms = tracking.value?.courierLive ? 5000 : 10000
   poll = setInterval(() => {
     if (tracking.value?.phase === 'delivered' || tracking.value?.phase === 'cancelled') {
       return
     }
-    // Avoid overwriting while actively pushing GPS
-    if (!sharing.value) void refresh()
+    if (!sharing.value && !es) void refresh()
   }, ms)
+}
+
+function startLiveStream() {
+  if (!import.meta.client || typeof EventSource === 'undefined') return
+  try {
+    es?.close()
+    es = new EventSource(trackingStreamUrl(props.orderId))
+    es.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data) as {
+          payload?: OrderTracking
+        }
+        if (data.payload?.id) tracking.value = data.payload
+      } catch {
+        /* ignore */
+      }
+    }
+    es.onerror = () => {
+      es?.close()
+      es = null
+      startPoll()
+    }
+  } catch {
+    startPoll()
+  }
 }
 
 onMounted(async () => {
   if (!props.initial) await refresh()
+  startLiveStream()
   startPoll()
 })
 onUnmounted(() => {
   if (poll) clearInterval(poll)
+  es?.close()
+  es = null
   stopSharing()
 })
 
@@ -169,6 +198,39 @@ const etaLabel = computed(() => {
         Arrivée estimée vers {{ arrivalLabel }}
       </p>
     </div>
+
+    <ol
+      v-if="tracking.steps?.length"
+      class="grid gap-2 rounded-2xl border border-line bg-canvas p-4 sm:grid-cols-4"
+    >
+      <li
+        v-for="(step, idx) in tracking.steps"
+        :key="step.key"
+        class="flex items-start gap-2 text-left"
+      >
+        <span
+          class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+          :class="step.done ? 'bg-brand text-white' : 'bg-line text-ink-muted'"
+        >
+          {{ idx + 1 }}
+        </span>
+        <span>
+          <span class="block text-xs font-semibold" :class="step.done ? 'text-ink' : 'text-ink-muted'">
+            {{ step.label }}
+          </span>
+          <span v-if="step.at" class="block text-[10px] text-ink-muted">
+            {{ new Date(step.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }}
+          </span>
+        </span>
+      </li>
+    </ol>
+
+    <p
+      v-if="tracking.courierLive"
+      class="rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-medium text-emerald-800"
+    >
+      GPS livreur actif — suivi en temps réel
+    </p>
 
     <ClientOnly>
       <DeliveryMap

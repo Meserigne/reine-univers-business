@@ -1,8 +1,20 @@
 export type OrderTracking = {
   id: string
   invoiceNumber?: string | null
-  status: 'PENDING' | 'CONFIRMED' | 'DELIVERED' | 'CANCELLED'
+  status:
+    | 'PENDING'
+    | 'CONFIRMED'
+    | 'PREPARING'
+    | 'OUT_FOR_DELIVERY'
+    | 'DELIVERED'
+    | 'CANCELLED'
   phase: 'preparing' | 'on_the_way' | 'delivered' | 'cancelled'
+  steps?: {
+    key: string
+    label: string
+    done: boolean
+    at: string | null
+  }[]
   customerName: string
   address: string
   phone: string
@@ -38,6 +50,10 @@ export type OrderTracking = {
   courierLocationAt?: string | null
   hasGps?: boolean
   courierLive?: boolean
+  livreurPath?: string
+  preparingAt?: string | null
+  departedAt?: string | null
+  deliveredAt?: string | null
   createdAt: string
   items: {
     id: string
