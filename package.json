@@ -13,7 +13,9 @@
     "db:up": "docker compose up -d",
     "db:migrate": "npm run prisma:migrate --workspace=api",
     "db:seed": "npm run prisma:seed --workspace=api",
-    "db:generate": "npm run prisma:generate --workspace=api"
+    "db:generate": "npm run prisma:generate --workspace=api",
+    "build:api": "npm install --workspace=api --include-workspace-root --ignore-scripts && npm rebuild --workspace=api && npm run prisma:generate --workspace=api && npm run build --workspace=api",
+    "start:api": "npm run prisma:deploy --workspace=api && npm run start:prod --workspace=api"
   },
   "devDependencies": {
     "concurrently": "^9.2.4"
