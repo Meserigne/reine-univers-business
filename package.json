@@ -15,7 +15,9 @@
     "db:seed": "npm run prisma:seed --workspace=api",
     "db:generate": "npm run prisma:generate --workspace=api",
     "build:api": "npm install --workspace=api --include-workspace-root --ignore-scripts && npm rebuild --workspace=api && npm run prisma:generate --workspace=api && npm run build --workspace=api",
-    "start:api": "npm run prisma:deploy --workspace=api && npm run start:prod --workspace=api"
+    "start:api": "npm run prisma:deploy --workspace=api && npm run start:prod --workspace=api",
+    "keepalive": "node scripts/keepalive.mjs",
+    "keepalive:loop": "node scripts/keepalive.mjs --loop"
   },
   "devDependencies": {
     "concurrently": "^9.2.4"
