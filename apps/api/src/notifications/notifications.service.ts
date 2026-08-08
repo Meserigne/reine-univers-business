@@ -52,6 +52,7 @@ export class NotificationsService implements OnModuleInit {
     data: Partial<{
       emailEnabled: boolean;
       smsEnabled: boolean;
+      whatsappEnabled: boolean;
       pushEnabled: boolean;
       inAppEnabled: boolean;
       notifyPlaced: boolean;
@@ -66,6 +67,7 @@ export class NotificationsService implements OnModuleInit {
       smtpPort: number;
       smtpUser: string;
       smtpPass: string;
+      whatsappFrom: string;
     }>,
   ) {
     await this.getSettings();
@@ -84,12 +86,30 @@ export class NotificationsService implements OnModuleInit {
     return this.getPublicSettings();
   }
 
+  private resolveWhatsappFrom(
+    settings: Awaited<ReturnType<typeof this.getSettings>>,
+  ) {
+    const raw =
+      settings.whatsappFrom?.trim() ||
+      process.env.TWILIO_WHATSAPP_FROM?.trim() ||
+      'whatsapp:+14155238886';
+    if (raw.startsWith('whatsapp:')) return raw;
+    const phone = this.normalizePhone(raw);
+    return phone ? `whatsapp:${phone}` : 'whatsapp:+14155238886';
+  }
+
   async getPublicSettings() {
     const s = await this.getSettings();
     const provider = this.resolveEmailProvider(s);
+    const twilioReady = Boolean(
+      process.env.TWILIO_ACCOUNT_SID &&
+        (process.env.TWILIO_AUTH_TOKEN ||
+          (process.env.TWILIO_API_KEY && process.env.TWILIO_API_SECRET)),
+    );
     return {
       emailEnabled: s.emailEnabled,
       smsEnabled: s.smsEnabled,
+      whatsappEnabled: s.whatsappEnabled,
       pushEnabled: s.pushEnabled,
       inAppEnabled: s.inAppEnabled,
       notifyPlaced: s.notifyPlaced,
@@ -109,6 +129,10 @@ export class NotificationsService implements OnModuleInit {
       smtpPassSet: Boolean(s.smtpPass || process.env.SMTP_PASS),
       emailReady: provider === 'resend' || provider === 'smtp',
       resolvedEmailProvider: provider,
+      whatsappFrom: this.resolveWhatsappFrom(s),
+      whatsappReady: twilioReady,
+      sandboxHint:
+        'Sandbox Twilio : le client doit d’abord envoyer « join <code> » au +1 415 523 8886',
     };
   }
 
@@ -292,6 +316,21 @@ export class NotificationsService implements OnModuleInit {
         );
       }
 
+      if (settings.whatsappEnabled && order.phone) {
+        tasks.push(
+          this.createAndSend({
+            orderId: order.id,
+            customerId: customer?.id ?? null,
+            phone: order.phone,
+            email,
+            event,
+            channel: 'WHATSAPP',
+            title: msg.title,
+            body: `*${msg.title}*\n\n${msg.body}`,
+          }),
+        );
+      }
+
       if (settings.pushEnabled && customer?.pushTokens) {
         tasks.push(
           this.createAndSend({
@@ -328,6 +367,16 @@ export class NotificationsService implements OnModuleInit {
     return { ok: true, to: email };
   }
 
+  async sendTestWhatsapp(to: string) {
+    const phone = this.normalizePhone(to);
+    if (!phone) throw new Error('Numéro WhatsApp invalide');
+    await this.sendWhatsapp(
+      phone,
+      '*Test RUBFresh*\n\nNotifications WhatsApp actives. Vous recevrez les mises à jour de commande ici.',
+    );
+    return { ok: true, to: phone };
+  }
+
   private async createAndSend(input: {
     orderId: string;
     customerId?: string | null;
@@ -359,6 +408,8 @@ export class NotificationsService implements OnModuleInit {
         await this.sendEmail(input.email!, input.title, input.body);
       } else if (input.channel === 'SMS') {
         await this.sendSms(input.phone!, input.body);
+      } else if (input.channel === 'WHATSAPP') {
+        await this.sendWhatsapp(input.phone!, input.body);
       } else if (input.channel === 'PUSH') {
         await this.sendPush(input.meta?.pushTokens as string | undefined, {
           title: input.title,
@@ -370,7 +421,7 @@ export class NotificationsService implements OnModuleInit {
 
       return this.prisma.notification.update({
         where: { id: row.id },
-        data: { status: input.channel === 'IN_APP' ? 'sent' : 'sent', sentAt: new Date() },
+        data: { status: 'sent', sentAt: new Date() },
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -480,6 +531,42 @@ export class NotificationsService implements OnModuleInit {
     return phone.startsWith('+') ? phone : `+${phone}`;
   }
 
+  private twilioAuth() {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const apiKey = process.env.TWILIO_API_KEY?.trim();
+    const apiSecret = process.env.TWILIO_API_SECRET?.trim();
+    const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+    if (!accountSid) throw new Error('TWILIO_ACCOUNT_SID manquant');
+    const user = apiKey || accountSid;
+    const pass = apiKey ? apiSecret : authToken;
+    if (!pass) {
+      throw new Error(
+        'Twilio: fournir TWILIO_API_KEY+TWILIO_API_SECRET ou TWILIO_AUTH_TOKEN',
+      );
+    }
+    return {
+      accountSid,
+      authHeader: Buffer.from(`${user}:${pass}`).toString('base64'),
+    };
+  }
+
+  private async twilioCreateMessage(params: URLSearchParams) {
+    const { accountSid, authHeader } = this.twilioAuth();
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${authHeader}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params,
+      },
+    );
+    if (!res.ok) throw new Error(`Twilio ${res.status}: ${await res.text()}`);
+    return res.json() as Promise<{ sid?: string; status?: string }>;
+  }
+
   private async sendSms(to: string, body: string) {
     const provider = (process.env.SMS_PROVIDER || 'console').toLowerCase();
     const phone = this.normalizePhone(to);
@@ -491,41 +578,48 @@ export class NotificationsService implements OnModuleInit {
     }
 
     if (provider === 'twilio') {
-      const accountSid = process.env.TWILIO_ACCOUNT_SID;
-      const apiKey = process.env.TWILIO_API_KEY?.trim();
-      const apiSecret = process.env.TWILIO_API_SECRET?.trim();
-      const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-      // Pour le Sénégal: préférer un Alphanumeric Sender ID (ex: RUBFresh)
       const from = process.env.TWILIO_FROM || 'RUBFresh';
-      if (!accountSid) {
-        throw new Error('TWILIO_ACCOUNT_SID manquant');
-      }
-      // API Key (SK…) prioritaire, sinon Auth Token classique
-      const user = apiKey || accountSid;
-      const pass = apiKey ? apiSecret : authToken;
-      if (!pass) {
-        throw new Error(
-          'Twilio: fournir TWILIO_API_KEY+TWILIO_API_SECRET ou TWILIO_AUTH_TOKEN',
-        );
-      }
-      const auth = Buffer.from(`${user}:${pass}`).toString('base64');
-      const params = new URLSearchParams({ To: phone, From: from, Body: body });
-      const res = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${auth}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: params,
-        },
+      await this.twilioCreateMessage(
+        new URLSearchParams({ To: phone, From: from, Body: body }),
       );
-      if (!res.ok) throw new Error(`Twilio ${res.status}: ${await res.text()}`);
       return;
     }
 
     throw new Error(`SMS_PROVIDER inconnu: ${provider}`);
+  }
+
+  private async sendWhatsapp(to: string, body: string) {
+    const provider = (
+      process.env.WHATSAPP_PROVIDER ||
+      process.env.SMS_PROVIDER ||
+      'console'
+    ).toLowerCase();
+    const phone = this.normalizePhone(to);
+    if (!phone) throw new Error('Numéro WhatsApp invalide');
+
+    if (provider === 'console') {
+      this.logger.warn(
+        `[whatsapp:console] BLOQUÉ — configurez Twilio WhatsApp. to=${phone}`,
+      );
+      throw new Error(
+        'WhatsApp non configuré (mode console). Activez Twilio WhatsApp / sandbox.',
+      );
+    }
+
+    if (provider === 'twilio') {
+      const settings = await this.getSettings();
+      const from = this.resolveWhatsappFrom(settings);
+      const toWa = phone.startsWith('whatsapp:') ? phone : `whatsapp:${phone}`;
+      const result = await this.twilioCreateMessage(
+        new URLSearchParams({ To: toWa, From: from, Body: body }),
+      );
+      this.logger.log(
+        `[whatsapp:twilio] sent to=${toWa} sid=${result.sid || '?'} status=${result.status || '?'}`,
+      );
+      return;
+    }
+
+    throw new Error(`WHATSAPP_PROVIDER inconnu: ${provider}`);
   }
 
   private async sendPush(

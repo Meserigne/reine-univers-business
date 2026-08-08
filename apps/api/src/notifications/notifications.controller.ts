@@ -91,6 +91,7 @@ export class NotificationsController {
     body: Partial<{
       emailEnabled: boolean;
       smsEnabled: boolean;
+      whatsappEnabled: boolean;
       pushEnabled: boolean;
       inAppEnabled: boolean;
       notifyPlaced: boolean;
@@ -105,6 +106,7 @@ export class NotificationsController {
       smtpPort: number;
       smtpUser: string;
       smtpPass: string;
+      whatsappFrom: string;
     }>,
   ) {
     return this.notifications.updateSettings(body);
@@ -120,6 +122,20 @@ export class NotificationsController {
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : 'Envoi test impossible',
+      );
+    }
+  }
+
+  @UseGuards(AdminJwtAuthGuard)
+  @Post('admin/notifications/test-whatsapp')
+  async testWhatsapp(@Body() body: { to?: string }) {
+    const to = String(body?.to || '').trim();
+    if (!to) throw new BadRequestException('Indiquez un numéro WhatsApp');
+    try {
+      return await this.notifications.sendTestWhatsapp(to);
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : 'Envoi WhatsApp impossible',
       );
     }
   }

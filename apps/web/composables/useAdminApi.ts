@@ -323,6 +323,7 @@ export function useAdminApi() {
       api<{
         emailEnabled: boolean
         smsEnabled: boolean
+        whatsappEnabled: boolean
         pushEnabled: boolean
         inAppEnabled: boolean
         notifyPlaced: boolean
@@ -339,11 +340,15 @@ export function useAdminApi() {
         smtpPassSet: boolean
         emailReady: boolean
         resolvedEmailProvider: string
+        whatsappFrom: string
+        whatsappReady: boolean
+        sandboxHint: string
       }>(`${base}/notification-settings`),
     updateNotificationSettings: (
       body: Partial<{
         emailEnabled: boolean
         smsEnabled: boolean
+        whatsappEnabled: boolean
         pushEnabled: boolean
         inAppEnabled: boolean
         notifyPlaced: boolean
@@ -358,10 +363,16 @@ export function useAdminApi() {
         smtpPort: number
         smtpUser: string
         smtpPass: string
+        whatsappFrom: string
       }>,
     ) => api(`${base}/notification-settings`, { method: 'PATCH', body }),
     testNotificationEmail: (to: string) =>
       api<{ ok: boolean; to: string }>(`${base}/notifications/test-email`, {
+        method: 'POST',
+        body: { to },
+      }),
+    testNotificationWhatsapp: (to: string) =>
+      api<{ ok: boolean; to: string }>(`${base}/notifications/test-whatsapp`, {
         method: 'POST',
         body: { to },
       }),

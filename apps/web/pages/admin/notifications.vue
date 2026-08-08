@@ -6,6 +6,7 @@ const error = ref('')
 const success = ref('')
 const saving = ref(false)
 const testing = ref(false)
+const testingWa = ref(false)
 
 const { data: settings, refresh: refreshSettings } = await useAsyncData(
   'admin-notification-settings',
@@ -19,6 +20,7 @@ const { data: logs, refresh: refreshLogs } = await useAsyncData(
 const form = reactive({
   emailEnabled: true,
   smsEnabled: true,
+  whatsappEnabled: true,
   pushEnabled: true,
   inAppEnabled: true,
   notifyPlaced: true,
@@ -33,9 +35,11 @@ const form = reactive({
   smtpPort: 587,
   smtpUser: '',
   smtpPass: '',
+  whatsappFrom: 'whatsapp:+14155238886',
 })
 
 const testTo = ref('meserigne@gmail.com')
+const testWaTo = ref('774823939')
 
 watch(
   settings,
@@ -43,6 +47,7 @@ watch(
     if (!s) return
     form.emailEnabled = s.emailEnabled
     form.smsEnabled = s.smsEnabled
+    form.whatsappEnabled = s.whatsappEnabled
     form.pushEnabled = s.pushEnabled
     form.inAppEnabled = s.inAppEnabled
     form.notifyPlaced = s.notifyPlaced
@@ -55,6 +60,7 @@ watch(
     form.smtpHost = s.smtpHost || ''
     form.smtpPort = s.smtpPort || 587
     form.smtpUser = s.smtpUser || ''
+    form.whatsappFrom = s.whatsappFrom || 'whatsapp:+14155238886'
     form.resendApiKey = ''
     form.smtpPass = ''
   },
@@ -69,6 +75,7 @@ async function save() {
     const body: Record<string, unknown> = {
       emailEnabled: form.emailEnabled,
       smsEnabled: form.smsEnabled,
+      whatsappEnabled: form.whatsappEnabled,
       pushEnabled: form.pushEnabled,
       inAppEnabled: form.inAppEnabled,
       notifyPlaced: form.notifyPlaced,
@@ -81,6 +88,7 @@ async function save() {
       smtpHost: form.smtpHost.trim(),
       smtpPort: Number(form.smtpPort) || 587,
       smtpUser: form.smtpUser.trim(),
+      whatsappFrom: form.whatsappFrom.trim(),
     }
     if (form.resendApiKey.trim()) body.resendApiKey = form.resendApiKey.trim()
     if (form.smtpPass.trim()) body.smtpPass = form.smtpPass.trim()
@@ -114,9 +122,27 @@ async function sendTest() {
   }
 }
 
+async function sendTestWhatsapp() {
+  testingWa.value = true
+  error.value = ''
+  success.value = ''
+  try {
+    const res = await api.testNotificationWhatsapp(testWaTo.value.trim())
+    success.value = `WhatsApp de test envoyé à ${res.to}`
+    await refreshLogs()
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string | string[] } }
+    const msg = err?.data?.message
+    error.value = Array.isArray(msg) ? msg.join(', ') : msg || 'Échec WhatsApp'
+  } finally {
+    testingWa.value = false
+  }
+}
+
 const channelLabel: Record<string, string> = {
   EMAIL: 'Email',
   SMS: 'SMS',
+  WHATSAPP: 'WhatsApp',
   PUSH: 'Push app',
   IN_APP: 'In-app',
 }
@@ -259,12 +285,72 @@ const eventLabel: Record<string, string> = {
     </section>
 
     <section class="mb-8 rounded-2xl border border-line bg-surface p-6">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="font-display text-xl font-bold">Configuration WhatsApp</h2>
+          <p class="mt-1 text-sm text-ink-muted">
+            Via Twilio (même compte que les SMS). Sandbox :
+            <a
+              href="https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn"
+              target="_blank"
+              rel="noreferrer"
+              class="text-brand underline"
+            >activer ici</a>
+            puis envoyer <code class="text-xs">join …</code> depuis le téléphone client.
+          </p>
+        </div>
+        <span
+          class="rounded-full px-2.5 py-1 text-xs font-medium"
+          :class="
+            settings?.whatsappReady
+              ? 'bg-emerald-50 text-emerald-800'
+              : 'bg-brand-soft text-brand-dark'
+          "
+        >
+          {{ settings?.whatsappReady ? 'Twilio prêt' : 'Twilio manquant' }}
+        </span>
+      </div>
+
+      <label class="mt-4 block text-sm">
+        <span class="mb-1 block font-medium">Numéro expéditeur WhatsApp</span>
+        <input
+          v-model="form.whatsappFrom"
+          placeholder="whatsapp:+14155238886"
+          class="w-full rounded-xl border border-line px-3 py-2.5 outline-none focus:border-brand"
+        />
+      </label>
+      <p v-if="settings?.sandboxHint" class="mt-2 text-xs text-ink-muted">
+        {{ settings.sandboxHint }}
+      </p>
+
+      <div class="mt-4 flex flex-wrap items-end gap-2">
+        <label class="block min-w-[220px] flex-1 text-sm">
+          <span class="mb-1 block font-medium">WhatsApp de test</span>
+          <input
+            v-model="testWaTo"
+            placeholder="774823939"
+            class="w-full rounded-xl border border-line px-3 py-2.5 outline-none focus:border-brand"
+          />
+        </label>
+        <button
+          type="button"
+          class="rounded-xl border border-line px-4 py-2.5 text-sm font-medium disabled:opacity-60"
+          :disabled="testingWa"
+          @click="sendTestWhatsapp"
+        >
+          {{ testingWa ? 'Envoi…' : 'Tester WhatsApp' }}
+        </button>
+      </div>
+    </section>
+
+    <section class="mb-8 rounded-2xl border border-line bg-surface p-6">
       <h2 class="font-display text-xl font-bold">Canaux</h2>
       <div class="mt-4 grid gap-3 sm:grid-cols-2">
         <label
           v-for="key in [
             ['emailEnabled', 'Email'],
             ['smsEnabled', 'SMS'],
+            ['whatsappEnabled', 'WhatsApp'],
             ['pushEnabled', 'Push mobile (Expo)'],
             ['inAppEnabled', 'Notifications in-app'],
           ] as const"

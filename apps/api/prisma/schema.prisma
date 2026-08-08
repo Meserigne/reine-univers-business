@@ -19,6 +19,7 @@ enum OrderStatus {
 enum NotificationChannel {
   EMAIL
   SMS
+  WHATSAPP
   PUSH
   IN_APP
 }
@@ -149,6 +150,7 @@ model NotificationSettings {
   id              String  @id @default("main")
   emailEnabled    Boolean @default(true)
   smsEnabled      Boolean @default(true)
+  whatsappEnabled Boolean @default(true)
   pushEnabled     Boolean @default(true)
   inAppEnabled    Boolean @default(true)
   notifyPlaced    Boolean @default(true)
@@ -164,6 +166,8 @@ model NotificationSettings {
   smtpPort        Int     @default(587)
   smtpUser        String  @default("")
   smtpPass        String  @default("")
+  /// Ex: whatsapp:+14155238886 (sandbox Twilio) ou numéro WA Business
+  whatsappFrom    String  @default("")
   updatedAt       DateTime @updatedAt
 }
 
