@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsEmail,
   IsInt,
   IsOptional,
   IsString,
@@ -227,6 +228,14 @@ export class UpdateOrderTrackingDto {
   @IsOptional() @IsString() status?: 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'CANCELLED';
   @IsOptional() @IsBoolean() markDeparted?: boolean;
   @IsOptional() @IsBoolean() markArrived?: boolean;
+}
+
+export class CreateCustomerDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsString() @MinLength(8) phone!: string;
+  @IsOptional() @IsEmail() email?: string;
+  @IsOptional() @IsString() address?: string;
+  @IsString() @MinLength(6) password!: string;
 }
 
 export class CreateAdminAccountDto {

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { PagesService } from '../pages/pages.service';
@@ -14,6 +15,7 @@ import {
   CreateAdminAccountDto,
   CreateCategoryDto,
   CreateCourierDto,
+  CreateCustomerDto,
   CreateProductDto,
   CreateZoneDto,
   UpdateAdminAccountDto,
@@ -191,6 +193,50 @@ export class AdminService {
         _count: { select: { orders: true } },
       },
     });
+  }
+
+  async createCustomer(dto: CreateCustomerDto) {
+    const phone = dto.phone.replace(/\s+/g, '').trim();
+    const existing = await this.prisma.customer.findUnique({ where: { phone } });
+    if (existing) {
+      throw new ConflictException('Un compte existe déjà avec ce téléphone');
+    }
+    const email = dto.email?.toLowerCase().trim() || null;
+    if (email) {
+      const emailTaken = await this.prisma.customer.findUnique({ where: { email } });
+      if (emailTaken) {
+        throw new ConflictException('Cet email est déjà utilisé');
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const customer = await this.prisma.customer.create({
+      data: {
+        name: dto.name.trim(),
+        phone,
+        email,
+        address: dto.address?.trim() || null,
+        passwordHash,
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        address: true,
+        active: true,
+        createdAt: true,
+        _count: { select: { orders: true } },
+      },
+    });
+
+    await this.prisma.loyaltyAccount.upsert({
+      where: { phone },
+      create: { phone, points: 0 },
+      update: {},
+    });
+
+    return customer;
   }
 
   async updateOrderStatus(id: string, status: OrderStatus) {

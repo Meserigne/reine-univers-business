@@ -14,6 +14,7 @@ import {
   CreateAdminAccountDto,
   CreateCategoryDto,
   CreateCourierDto,
+  CreateCustomerDto,
   CreateProductDto,
   CreateZoneDto,
   UpdateAdminAccountDto,
@@ -136,6 +137,11 @@ export class AdminController {
   @Get('customers')
   listCustomers() {
     return this.adminService.listCustomers();
+  }
+
+  @Post('customers')
+  createCustomer(@Body() dto: CreateCustomerDto) {
+    return this.adminService.createCustomer(dto);
   }
 
   @Get('couriers')

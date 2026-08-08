@@ -248,6 +248,23 @@ export function useAdminApi() {
           _count: { orders: number }
         }[]
       >(`${base}/customers`),
+    createCustomer: (body: {
+      name: string
+      phone: string
+      email?: string
+      address?: string
+      password: string
+    }) =>
+      api<{
+        id: string
+        name: string
+        phone: string
+        email: string | null
+        address: string | null
+        active: boolean
+        createdAt: string
+        _count: { orders: number }
+      }>(`${base}/customers`, { method: 'POST', body }),
     adminAccounts: () =>
       api<
         {
