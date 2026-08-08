@@ -13,9 +13,15 @@ type CustomerRow = {
 }
 
 const api = useAdminApi()
+const { ensureSession } = useAdminAuth()
+
 const { data: customers, pending, refresh, error } = await useAsyncData(
   'admin-customers',
-  () => api.customers(),
+  async () => {
+    await ensureSession()
+    return api.customers()
+  },
+  { server: false },
 )
 
 const search = ref('')
