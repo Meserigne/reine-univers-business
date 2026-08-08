@@ -12,9 +12,10 @@ type CustomerRow = {
   _count: { orders: number }
 }
 
-const config = useRuntimeConfig()
-const { data: customers, pending, refresh } = await useAsyncData('admin-customers', () =>
-  $fetch<CustomerRow[]>(`${config.public.apiUrl}/admin/customers`),
+const api = useAdminApi()
+const { data: customers, pending, refresh, error } = await useAsyncData(
+  'admin-customers',
+  () => api.customers(),
 )
 
 const search = ref('')
@@ -62,6 +63,9 @@ function formatDate(iso: string) {
     />
 
     <div v-if="pending && !customers" class="text-ink-muted">Chargement…</div>
+    <p v-else-if="error" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      Impossible de charger les clients. Reconnecte-toi à l’admin puis actualise.
+    </p>
     <p v-else-if="!filtered.length" class="text-ink-muted">Aucun client inscrit.</p>
 
     <div v-else class="overflow-x-auto rounded-2xl border border-line bg-surface">

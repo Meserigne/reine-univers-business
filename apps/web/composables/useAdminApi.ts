@@ -235,6 +235,19 @@ export function useAdminApi() {
     deleteMessage: (id: string) =>
       api(`${base}/messages/${id}`, { method: 'DELETE' }),
     loyalty: () => api<AdminLoyalty[]>(`${base}/loyalty`),
+    customers: () =>
+      api<
+        {
+          id: string
+          name: string
+          phone: string
+          email: string | null
+          address: string | null
+          active: boolean
+          createdAt: string
+          _count: { orders: number }
+        }[]
+      >(`${base}/customers`),
     adminAccounts: () =>
       api<
         {
