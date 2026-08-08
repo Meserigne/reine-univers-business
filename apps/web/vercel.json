@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nuxtjs",
-  "installCommand": "npm install",
-  "buildCommand": "npm run build --workspace=web"
+  "installCommand": "cd ../.. && rm -rf node_modules apps/web/node_modules && npm install --include=optional",
+  "buildCommand": "nuxt build"
 }
