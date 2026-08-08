@@ -330,6 +330,15 @@ export function useAdminApi() {
         notifyDeparted: boolean
         notifyDelivered: boolean
         notifyCancelled: boolean
+        emailProvider: string
+        emailFrom: string
+        smtpHost: string
+        smtpPort: number
+        smtpUser: string
+        resendApiKeySet: boolean
+        smtpPassSet: boolean
+        emailReady: boolean
+        resolvedEmailProvider: string
       }>(`${base}/notification-settings`),
     updateNotificationSettings: (
       body: Partial<{
@@ -342,7 +351,19 @@ export function useAdminApi() {
         notifyDeparted: boolean
         notifyDelivered: boolean
         notifyCancelled: boolean
+        emailProvider: string
+        emailFrom: string
+        resendApiKey: string
+        smtpHost: string
+        smtpPort: number
+        smtpUser: string
+        smtpPass: string
       }>,
     ) => api(`${base}/notification-settings`, { method: 'PATCH', body }),
+    testNotificationEmail: (to: string) =>
+      api<{ ok: boolean; to: string }>(`${base}/notifications/test-email`, {
+        method: 'POST',
+        body: { to },
+      }),
   }
 }

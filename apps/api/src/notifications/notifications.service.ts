@@ -11,6 +11,7 @@ type OrderNotify = Pick<
   Order,
   | 'id'
   | 'invoiceNumber'
+  | 'customerId'
   | 'customerName'
   | 'phone'
   | 'address'
@@ -18,7 +19,6 @@ type OrderNotify = Pick<
   | 'courierPhone'
   | 'amountDue'
   | 'total'
-  | 'customerId'
   | 'trackingToken'
 >;
 
@@ -59,20 +59,76 @@ export class NotificationsService implements OnModuleInit {
       notifyDeparted: boolean;
       notifyDelivered: boolean;
       notifyCancelled: boolean;
+      emailProvider: string;
+      emailFrom: string;
+      resendApiKey: string;
+      smtpHost: string;
+      smtpPort: number;
+      smtpUser: string;
+      smtpPass: string;
     }>,
   ) {
     await this.getSettings();
-    return this.prisma.notificationSettings.update({
+    const patch: Record<string, unknown> = { ...data };
+    // Don't wipe secrets when the admin leaves the field blank
+    if (patch.resendApiKey === '' || patch.resendApiKey === undefined) {
+      delete patch.resendApiKey;
+    }
+    if (patch.smtpPass === '' || patch.smtpPass === undefined) {
+      delete patch.smtpPass;
+    }
+    await this.prisma.notificationSettings.update({
       where: { id: 'main' },
-      data,
+      data: patch,
     });
+    return this.getPublicSettings();
+  }
+
+  async getPublicSettings() {
+    const s = await this.getSettings();
+    const provider = this.resolveEmailProvider(s);
+    return {
+      emailEnabled: s.emailEnabled,
+      smsEnabled: s.smsEnabled,
+      pushEnabled: s.pushEnabled,
+      inAppEnabled: s.inAppEnabled,
+      notifyPlaced: s.notifyPlaced,
+      notifyPreparing: s.notifyPreparing,
+      notifyDeparted: s.notifyDeparted,
+      notifyDelivered: s.notifyDelivered,
+      notifyCancelled: s.notifyCancelled,
+      emailProvider: s.emailProvider || process.env.EMAIL_PROVIDER || 'console',
+      emailFrom:
+        s.emailFrom ||
+        process.env.EMAIL_FROM ||
+        'RUBFresh <onboarding@resend.dev>',
+      smtpHost: s.smtpHost || process.env.SMTP_HOST || '',
+      smtpPort: s.smtpPort || Number(process.env.SMTP_PORT || 587),
+      smtpUser: s.smtpUser || process.env.SMTP_USER || '',
+      resendApiKeySet: Boolean(s.resendApiKey || process.env.RESEND_API_KEY),
+      smtpPassSet: Boolean(s.smtpPass || process.env.SMTP_PASS),
+      emailReady: provider === 'resend' || provider === 'smtp',
+      resolvedEmailProvider: provider,
+    };
+  }
+
+  private resolveEmailProvider(
+    settings: Awaited<ReturnType<typeof this.getSettings>>,
+  ) {
+    const fromDb = (settings.emailProvider || '').toLowerCase().trim();
+    if (fromDb === 'resend' || fromDb === 'smtp' || fromDb === 'console') {
+      return fromDb;
+    }
+    if (settings.resendApiKey || process.env.RESEND_API_KEY) return 'resend';
+    if (settings.smtpHost || process.env.SMTP_HOST) return 'smtp';
+    return (process.env.EMAIL_PROVIDER || 'console').toLowerCase();
   }
 
   private webBase() {
     return (
-      process.env.ADMIN_WEB_URL?.replace(/\/$/, '') ||
       process.env.PUBLIC_WEB_URL?.replace(/\/$/, '') ||
-      'http://127.0.0.1:3000'
+      process.env.ADMIN_WEB_URL?.replace(/\/$/, '') ||
+      'https://www.rubfresh.com'
     );
   }
 
@@ -142,19 +198,32 @@ export class NotificationsService implements OnModuleInit {
     }
   }
 
+  private async resolveCustomer(order: OrderNotify) {
+    if (order.customerId) {
+      const byId = await this.prisma.customer.findUnique({
+        where: { id: order.customerId },
+      });
+      if (byId) return byId;
+    }
+    const phone = String(order.phone || '').replace(/\s+/g, '').trim();
+    if (!phone) return null;
+    const byPhone = await this.prisma.customer.findUnique({ where: { phone } });
+    if (byPhone) return byPhone;
+    // Try without country code variants
+    const digits = phone.replace(/^\+?221/, '');
+    if (digits !== phone) {
+      return this.prisma.customer.findUnique({ where: { phone: digits } });
+    }
+    return null;
+  }
+
   async notifyOrderEvent(event: NotificationEvent, order: OrderNotify) {
     try {
       const settings = await this.getSettings();
       if (!this.eventEnabled(settings, event)) return;
 
-      const customer = order.customerId
-        ? await this.prisma.customer.findUnique({
-            where: { id: order.customerId },
-          })
-        : await this.prisma.customer.findUnique({
-            where: { phone: order.phone },
-          });
-
+      const customer = await this.resolveCustomer(order);
+      const email = customer?.email?.trim() || null;
       const msg = this.messageFor(event, order);
       const tasks: Promise<unknown>[] = [];
 
@@ -164,7 +233,7 @@ export class NotificationsService implements OnModuleInit {
             orderId: order.id,
             customerId: customer?.id ?? order.customerId,
             phone: order.phone,
-            email: customer?.email ?? null,
+            email,
             event,
             channel: 'IN_APP',
             title: msg.title,
@@ -173,19 +242,39 @@ export class NotificationsService implements OnModuleInit {
         );
       }
 
-      if (settings.emailEnabled && customer?.email) {
-        tasks.push(
-          this.createAndSend({
-            orderId: order.id,
-            customerId: customer.id,
-            phone: order.phone,
-            email: customer.email,
-            event,
-            channel: 'EMAIL',
-            title: msg.title,
-            body: msg.body,
-          }),
-        );
+      if (settings.emailEnabled) {
+        if (email) {
+          tasks.push(
+            this.createAndSend({
+              orderId: order.id,
+              customerId: customer?.id ?? null,
+              phone: order.phone,
+              email,
+              event,
+              channel: 'EMAIL',
+              title: msg.title,
+              body: msg.body,
+            }),
+          );
+        } else {
+          this.logger.warn(
+            `EMAIL skipped for ${event}/${order.id}: no customer email`,
+          );
+          await this.prisma.notification.create({
+            data: {
+              orderId: order.id,
+              customerId: customer?.id ?? null,
+              phone: order.phone,
+              email: null,
+              event,
+              channel: 'EMAIL',
+              title: msg.title,
+              body: msg.body,
+              status: 'failed',
+              error: 'Pas d’email client — renseignez l’email du compte',
+            },
+          });
+        }
       }
 
       if (settings.smsEnabled && order.phone) {
@@ -194,7 +283,7 @@ export class NotificationsService implements OnModuleInit {
             orderId: order.id,
             customerId: customer?.id ?? null,
             phone: order.phone,
-            email: customer?.email ?? null,
+            email,
             event,
             channel: 'SMS',
             title: msg.title,
@@ -209,7 +298,7 @@ export class NotificationsService implements OnModuleInit {
             orderId: order.id,
             customerId: customer.id,
             phone: order.phone,
-            email: customer.email,
+            email,
             event,
             channel: 'PUSH',
             title: msg.title,
@@ -223,6 +312,20 @@ export class NotificationsService implements OnModuleInit {
     } catch (err) {
       this.logger.error(`notifyOrderEvent(${event}) failed`, err as Error);
     }
+  }
+
+  /** Envoi de test depuis l’admin */
+  async sendTestEmail(to: string) {
+    const email = to.trim().toLowerCase();
+    if (!email.includes('@')) {
+      throw new Error('Email de test invalide');
+    }
+    await this.sendEmail(
+      email,
+      'Test RUBFresh — notifications email',
+      'Ceci est un email de test. Si vous le recevez, les notifications commande sont prêtes.',
+    );
+    return { ok: true, to: email };
   }
 
   private async createAndSend(input: {
@@ -279,47 +382,86 @@ export class NotificationsService implements OnModuleInit {
     }
   }
 
+  private emailHtml(subject: string, text: string) {
+    const safe = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const withLinks = safe.replace(
+      /(https?:\/\/[^\s]+)/g,
+      '<a href="$1" style="color:#c45c26;word-break:break-all">$1</a>',
+    );
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f6f3ef;font-family:Georgia,serif">
+  <div style="max-width:560px;margin:24px auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e8e0d6">
+    <div style="background:#1a1a1a;color:#fff;padding:20px 24px;font-size:20px;letter-spacing:0.04em">RUBFresh</div>
+    <div style="padding:24px">
+      <h1 style="margin:0 0 12px;font-size:22px;color:#1a1a1a">${subject.replace(/</g, '')}</h1>
+      <p style="margin:0;line-height:1.6;color:#333;white-space:pre-wrap;font-family:system-ui,sans-serif;font-size:15px">${withLinks}</p>
+    </div>
+    <div style="padding:16px 24px;background:#f6f3ef;color:#777;font-size:12px;font-family:system-ui,sans-serif">
+      Reine Univers Business · viande fraîche livrée
+    </div>
+  </div>
+</body></html>`;
+  }
+
   private async sendEmail(to: string, subject: string, text: string) {
-    const provider = (process.env.EMAIL_PROVIDER || 'console').toLowerCase();
-    if (provider === 'console' || !to) {
-      this.logger.log(`[email:${provider}] to=${to} subject=${subject}`);
-      return;
+    if (!to) throw new Error('Destinataire email manquant');
+    const settings = await this.getSettings();
+    const provider = this.resolveEmailProvider(settings);
+    const from =
+      settings.emailFrom?.trim() ||
+      process.env.EMAIL_FROM ||
+      'RUBFresh <onboarding@resend.dev>';
+    const html = this.emailHtml(subject, text);
+
+    if (provider === 'console') {
+      this.logger.warn(
+        `[email:console] BLOQUÉ — configurez Resend dans Admin → Notifications. to=${to} subject=${subject}`,
+      );
+      throw new Error(
+        'Email non configuré (mode console). Ajoutez une clé Resend dans Admin → Notifications.',
+      );
     }
 
     if (provider === 'resend') {
-      const key = process.env.RESEND_API_KEY;
-      const from = process.env.EMAIL_FROM || 'RUB <onboarding@resend.dev>';
-      if (!key) throw new Error('RESEND_API_KEY manquant');
+      const key = settings.resendApiKey || process.env.RESEND_API_KEY;
+      if (!key) throw new Error('Clé Resend manquante');
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${key}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ from, to: [to], subject, text }),
+        body: JSON.stringify({ from, to: [to], subject, text, html }),
       });
       if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
+      this.logger.log(`[email:resend] sent to=${to} subject=${subject}`);
       return;
     }
 
     if (provider === 'smtp') {
-      // Dynamic import to keep optional
+      const host = settings.smtpHost || process.env.SMTP_HOST;
+      const user = settings.smtpUser || process.env.SMTP_USER;
+      const pass = settings.smtpPass || process.env.SMTP_PASS;
+      if (!host || !user || !pass) {
+        throw new Error('SMTP incomplet (host / user / pass)');
+      }
       const nodemailer = await import('nodemailer');
       const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
+        host,
+        port: settings.smtpPort || Number(process.env.SMTP_PORT || 587),
         secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-        },
+        auth: { user, pass },
       });
       await transporter.sendMail({
-        from: process.env.EMAIL_FROM || process.env.SMTP_USER,
+        from: from || user,
         to,
         subject,
         text,
+        html,
       });
+      this.logger.log(`[email:smtp] sent to=${to} subject=${subject}`);
       return;
     }
 

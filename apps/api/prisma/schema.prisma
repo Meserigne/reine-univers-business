@@ -156,6 +156,14 @@ model NotificationSettings {
   notifyDeparted  Boolean @default(true)
   notifyDelivered Boolean @default(true)
   notifyCancelled Boolean @default(true)
+  /// resend | smtp | console — empty = use EMAIL_PROVIDER env
+  emailProvider   String  @default("")
+  emailFrom       String  @default("")
+  resendApiKey    String  @default("")
+  smtpHost        String  @default("")
+  smtpPort        Int     @default(587)
+  smtpUser        String  @default("")
+  smtpPass        String  @default("")
   updatedAt       DateTime @updatedAt
 }
 

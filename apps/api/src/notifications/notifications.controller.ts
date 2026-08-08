@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -80,7 +81,7 @@ export class NotificationsController {
   @UseGuards(AdminJwtAuthGuard)
   @Get('admin/notification-settings')
   getSettings() {
-    return this.notifications.getSettings();
+    return this.notifications.getPublicSettings();
   }
 
   @UseGuards(AdminJwtAuthGuard)
@@ -97,8 +98,29 @@ export class NotificationsController {
       notifyDeparted: boolean;
       notifyDelivered: boolean;
       notifyCancelled: boolean;
+      emailProvider: string;
+      emailFrom: string;
+      resendApiKey: string;
+      smtpHost: string;
+      smtpPort: number;
+      smtpUser: string;
+      smtpPass: string;
     }>,
   ) {
     return this.notifications.updateSettings(body);
+  }
+
+  @UseGuards(AdminJwtAuthGuard)
+  @Post('admin/notifications/test-email')
+  async testEmail(@Body() body: { to?: string }) {
+    const to = String(body?.to || '').trim();
+    if (!to) throw new BadRequestException('Indiquez un email de test');
+    try {
+      return await this.notifications.sendTestEmail(to);
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : 'Envoi test impossible',
+      );
+    }
   }
 }
