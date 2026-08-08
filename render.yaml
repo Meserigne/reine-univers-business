@@ -50,19 +50,6 @@ services:
       - key: DELIVERY_PREP_SECONDS
         value: "480"
 
-  # Ping /health chaque minute pour éviter le sleep du free tier
-  - type: cron
-    name: rub-api-keepalive
-    runtime: node
-    plan: free
-    region: frankfurt
-    schedule: "* * * * *"
-    buildCommand: "echo keepalive"
-    startCommand: "curl -fsS --max-time 25 -H 'User-Agent: rub-keepalive-render/1.0' https://rub-api.onrender.com/health"
-    envVars:
-      - key: NODE_VERSION
-        value: "22"
-
 databases:
   - name: rub-db
     plan: basic_256mb
