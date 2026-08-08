@@ -326,25 +326,50 @@ export class NotificationsService implements OnModuleInit {
     throw new Error(`EMAIL_PROVIDER inconnu: ${provider}`);
   }
 
+  /** Normalise un numéro SN vers E.164 (+221…) */
+  private normalizePhone(raw: string) {
+    let phone = String(raw || '').replace(/[\s().-]/g, '');
+    if (!phone) return '';
+    if (phone.startsWith('00')) phone = `+${phone.slice(2)}`;
+    if (phone.startsWith('+')) return phone;
+    // Senegal local: 77/78/76/70… → +221
+    if (/^(70|75|76|77|78)\d{7}$/.test(phone)) return `+221${phone}`;
+    if (/^221\d{9}$/.test(phone)) return `+${phone}`;
+    return phone.startsWith('+') ? phone : `+${phone}`;
+  }
+
   private async sendSms(to: string, body: string) {
     const provider = (process.env.SMS_PROVIDER || 'console').toLowerCase();
-    const phone = to.replace(/\s+/g, '');
+    const phone = this.normalizePhone(to);
+    if (!phone) throw new Error('Numéro SMS invalide');
+
     if (provider === 'console') {
       this.logger.log(`[sms:console] to=${phone} body=${body}`);
       return;
     }
 
     if (provider === 'twilio') {
-      const sid = process.env.TWILIO_ACCOUNT_SID;
-      const token = process.env.TWILIO_AUTH_TOKEN;
-      const from = process.env.TWILIO_FROM;
-      if (!sid || !token || !from) {
-        throw new Error('Twilio env manquantes (SID/TOKEN/FROM)');
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const apiKey = process.env.TWILIO_API_KEY?.trim();
+      const apiSecret = process.env.TWILIO_API_SECRET?.trim();
+      const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+      // Pour le Sénégal: préférer un Alphanumeric Sender ID (ex: RUBFresh)
+      const from = process.env.TWILIO_FROM || 'RUBFresh';
+      if (!accountSid) {
+        throw new Error('TWILIO_ACCOUNT_SID manquant');
       }
-      const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+      // API Key (SK…) prioritaire, sinon Auth Token classique
+      const user = apiKey || accountSid;
+      const pass = apiKey ? apiSecret : authToken;
+      if (!pass) {
+        throw new Error(
+          'Twilio: fournir TWILIO_API_KEY+TWILIO_API_SECRET ou TWILIO_AUTH_TOKEN',
+        );
+      }
+      const auth = Buffer.from(`${user}:${pass}`).toString('base64');
       const params = new URLSearchParams({ To: phone, From: from, Body: body });
       const res = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
         {
           method: 'POST',
           headers: {
