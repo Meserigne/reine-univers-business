@@ -60,29 +60,11 @@
     transition-delay: 0.24s;
   }
 
-  .marquee-track {
-    display: flex;
-    width: max-content;
-    animation: marquee-slide 28s linear infinite;
-  }
-
-  @keyframes marquee-slide {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(-50%);
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .reveal {
       opacity: 1;
       transform: none;
       transition: none;
-    }
-    .marquee-track {
-      animation: none;
     }
   }
 }
