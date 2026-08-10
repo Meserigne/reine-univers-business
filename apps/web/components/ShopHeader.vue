@@ -6,8 +6,20 @@ const emit = defineEmits<{ toggleMenu: [] }>()
 
 const { itemCount, openCart } = useCart()
 const { isLoggedIn, customer, ensureSession } = useAuth()
+const scrolled = ref(false)
+
+function onScroll() {
+  scrolled.value = window.scrollY > 12
+}
+
 onMounted(() => {
   ensureSession()
+  onScroll()
+  window.addEventListener('scroll', onScroll, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onScroll)
 })
 
 const navLinks = [
@@ -20,12 +32,23 @@ const navLinks = [
 </script>
 
 <template>
-  <header class="fixed inset-x-0 top-0 z-50 border-b border-line/80 bg-surface/90 backdrop-blur-md">
+  <header
+    class="fixed inset-x-0 top-0 z-50 border-b bg-surface/80 backdrop-blur-xl transition-[background,box-shadow,border-color] duration-300"
+    :class="
+      scrolled
+        ? 'border-line bg-surface/95 shadow-[0_10px_30px_-18px_rgba(0,0,0,0.35)]'
+        : 'border-line/80'
+    "
+  >
     <div class="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4 sm:px-6 lg:px-8">
-      <NuxtLink to="/" class="flex items-center gap-2.5">
-        <img src="/logo.png" alt="Reine Univers Business" class="h-11 w-11 object-contain" />
+      <NuxtLink to="/" class="group flex items-center gap-2.5">
+        <img
+          src="/logo.png"
+          alt="Reine Univers Business"
+          class="h-11 w-11 object-contain transition-transform duration-500 group-hover:scale-105"
+        />
         <span class="hidden flex-col leading-tight sm:flex">
-          <span class="font-display text-sm font-bold tracking-tight text-ink">
+          <span class="font-display text-sm font-bold tracking-tight text-ink transition-colors group-hover:text-brand">
             Reine Univers Business
           </span>
           <span class="text-[10px] font-medium uppercase tracking-[0.14em] text-brand">

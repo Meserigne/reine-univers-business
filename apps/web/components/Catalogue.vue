@@ -30,10 +30,29 @@ const categoryOrder = computed(() =>
 )
 
 const { getProducts } = useApi()
-const { data: products, pending, error } = await useAsyncData('products', () => getProducts())
+const { data: products, pending, error } = await useAsyncData(
+  'products',
+  () => getProducts(),
+  { lazy: true, server: false },
+)
+useReveal()
 
-const filter = ref('tous')
+const route = useRoute()
+const initialCategory = computed(() => {
+  const q = String(route.query.category || '')
+  const ids = filters.value.map((f) => f.id)
+  return ids.includes(q) ? q : 'tous'
+})
+
+const filter = ref(initialCategory.value)
 const cutFilter = ref<string | null>(null)
+
+watch(
+  () => route.query.category,
+  () => {
+    filter.value = initialCategory.value
+  },
+)
 
 const filtered = computed(() => {
   const list = products.value ?? []
@@ -62,12 +81,14 @@ watch(filter, () => {
 <template>
   <section id="catalogue" class="scroll-mt-20 bg-canvas py-16 sm:py-20">
     <div class="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8">
-      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand">
-        {{ eyebrow || 'Catalogue' }}
-      </p>
-      <h2 class="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
-        {{ title || 'Viande fraîche du jour' }}
-      </h2>
+      <div class="reveal">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand">
+          {{ eyebrow || 'Catalogue' }}
+        </p>
+        <h2 class="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+          {{ title || 'Viande fraîche du jour' }}
+        </h2>
+      </div>
 
       <div class="mt-8 flex flex-wrap gap-2">
         <button

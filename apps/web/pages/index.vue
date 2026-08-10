@@ -8,12 +8,18 @@ import {
   PhScooter,
   PhPhone,
   PhStar,
+  PhArrowRight,
+  PhCaretRight,
 } from '@phosphor-icons/vue'
 
 const { itemCount, openCart } = useCart()
 const { getHomePage } = useApi()
-const { data: home } = await useAsyncData('home-page', () => getHomePage())
+const { data: home } = await useAsyncData('home-page', () => getHomePage(), {
+  lazy: true,
+  server: false,
+})
 const menuOpen = ref(false)
+const scrolled = ref(false)
 
 const menuIcons = {
   Accueil: PhHouse,
@@ -45,49 +51,90 @@ const heroSubtitle = computed(
 )
 const ctaLabel = computed(() => home.value?.hero.ctaLabel ?? 'Commander')
 const brandName = computed(() => home.value?.brandName ?? 'Reine Univers Business')
+const contact = computed(
+  () =>
+    home.value?.contact ?? {
+      phone: '+221784802640',
+      whatsapp: '221784802640',
+      email: 'commande@reineunivers.sn',
+    },
+)
 
-const collage = [
+const marqueeItems = [
+  'Frais du jour',
+  'Livraison Dakar',
+  'Poulet · Œufs · Mouton',
+  'Veau · Porc',
+  'Qualité garantie',
+  'Commander en 2 min',
+]
+
+const categories = [
   {
-    src: '/chicken.png',
-    alt: 'Poulet entier frais',
-    wrap: 'col-span-2 flex items-end justify-center rounded-[2rem] bg-[#f5f5f5] p-3 sm:p-4 md:col-span-2 md:row-span-2 md:min-h-[280px] lg:min-h-[340px]',
-    img: 'h-auto max-h-[240px] w-full object-contain sm:max-h-[280px] md:max-h-[320px] lg:max-h-[380px]',
-    delay: '0s',
+    id: 'poulet',
+    label: 'Poulet',
+    text: 'Entier, découpes, toujours frais',
+    image: '/chicken.jpg',
+    to: '/commander?category=poulet',
+    featured: true,
   },
   {
-    src: '/eggs.png',
-    alt: 'Œufs frais',
-    wrap: 'flex items-center justify-center rounded-[1.5rem] bg-[#f5f5f5] p-2 sm:p-3',
-    img: 'h-auto max-h-[140px] w-full object-contain sm:max-h-[160px] md:max-h-[180px]',
-    delay: '0.2s',
+    id: 'oeuf',
+    label: 'Œufs',
+    text: 'Fraîcheur du jour',
+    image: '/eggs.jpg',
+    to: '/commander?category=oeuf',
   },
   {
-    src: '/mouton.png',
-    alt: 'Mouton frais',
-    wrap: 'flex items-center justify-center rounded-[1.5rem] bg-[#f5f5f5] p-2 sm:p-3',
-    img: 'h-auto max-h-[140px] w-full object-contain sm:max-h-[160px] md:max-h-[180px]',
-    delay: '0.4s',
+    id: 'mouton',
+    label: 'Mouton',
+    text: 'Découpes soignées',
+    image: '/mouton.jpg',
+    to: '/commander?category=mouton',
   },
   {
-    src: '/veau.png',
-    alt: 'Veau frais',
-    wrap: 'flex items-center justify-center rounded-[1.5rem] bg-[#f5f5f5] p-2 sm:p-3',
-    img: 'h-auto max-h-[120px] w-full object-contain sm:max-h-[140px]',
-    delay: '0.6s',
+    id: 'veau',
+    label: 'Veau',
+    text: 'Tendreté premium',
+    image: '/veau.jpg',
+    to: '/commander?category=veau',
   },
   {
-    src: '/porc.png',
-    alt: 'Porc frais',
-    wrap: 'flex items-center justify-center rounded-[1.5rem] bg-[#f5f5f5] p-2 sm:p-3 md:col-span-2',
-    img: 'h-auto max-h-[120px] w-full object-contain sm:max-h-[140px] md:max-h-[150px]',
-    delay: '0.8s',
+    id: 'porc',
+    label: 'Porc',
+    text: 'Qualité contrôlée',
+    image: '/porc.jpg',
+    to: '/commander?category=porc',
   },
 ]
+
+function onScroll() {
+  scrolled.value = window.scrollY > 12
+}
+
+onMounted(() => {
+  onScroll()
+  window.addEventListener('scroll', onScroll, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onScroll)
+})
+
+useReveal()
 </script>
 
 <template>
-  <div class="relative flex min-h-[100dvh] flex-col bg-white">
-    <header class="sticky top-0 z-50 bg-[#c8102e] text-white shadow-sm">
+  <div class="relative min-h-[100dvh] bg-canvas text-ink">
+    <!-- Header glass -->
+    <header
+      class="sticky top-0 z-50 text-white transition-[background,box-shadow] duration-300"
+      :class="
+        scrolled
+          ? 'bg-[#c8102e]/95 shadow-[0_10px_40px_-20px_rgba(0,0,0,0.55)] backdrop-blur-xl'
+          : 'bg-brand'
+      "
+    >
       <div class="mx-auto grid h-14 max-w-[1400px] grid-cols-3 items-center px-4 sm:h-16 sm:px-6">
         <button
           type="button"
@@ -100,11 +147,11 @@ const collage = [
           <PhList v-else :size="28" weight="bold" />
         </button>
 
-        <NuxtLink to="/" class="flex items-center gap-2 justify-self-center">
+        <NuxtLink to="/" class="group flex items-center gap-2 justify-self-center">
           <img
             src="/logo.png"
             alt=""
-            class="h-9 w-9 rounded-full bg-white object-contain p-0.5 sm:h-10 sm:w-10"
+            class="h-9 w-9 rounded-full bg-white object-contain p-0.5 transition-transform duration-500 group-hover:scale-105 sm:h-10 sm:w-10"
           />
           <span class="text-center font-display text-[13px] font-bold leading-tight tracking-tight sm:text-base md:text-lg">
             {{ brandName }}
@@ -118,16 +165,15 @@ const collage = [
           @click="openCart"
         >
           <PhShoppingCart :size="28" weight="bold" class="text-white" />
-          <span class="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[11px] font-extrabold leading-none text-brand">
+          <span
+            class="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[11px] font-extrabold leading-none text-brand"
+          >
             {{ itemCount }}
           </span>
         </button>
       </div>
 
-      <nav
-        v-if="menuOpen"
-        class="overflow-hidden border-t border-black/10 bg-white"
-      >
+      <nav v-if="menuOpen" class="overflow-hidden border-t border-black/10 bg-white">
         <ul class="mx-auto max-w-[1400px] bg-white px-6 py-1 sm:px-8">
           <li v-for="(item, i) in menuItems" :key="item.label">
             <NuxtLink
@@ -146,57 +192,196 @@ const collage = [
       </nav>
     </header>
 
-    <div class="relative z-20 w-full px-6 pt-5 sm:px-10 sm:pt-6 lg:px-16 lg:pt-7">
-      <div class="mx-auto flex w-full max-w-[1400px] justify-start">
-        <img
-          src="/logo.png"
-          :alt="brandName"
-          class="h-28 w-auto bg-transparent object-contain sm:h-32 md:h-40"
-        />
-      </div>
-    </div>
+    <!-- Full-bleed hero -->
+    <section class="relative min-h-[78dvh] w-full overflow-hidden sm:min-h-[88dvh]">
+      <img
+        src="/chicken.jpg"
+        alt=""
+        class="hero-media absolute inset-0 h-full w-full object-cover object-center"
+      />
+      <div
+        class="absolute inset-0 bg-gradient-to-t from-black/90 via-[#9e0c24]/65 to-black/35"
+        aria-hidden="true"
+      />
+      <div
+        class="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-canvas to-transparent"
+        aria-hidden="true"
+      />
 
-    <section class="relative z-10 mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 items-center gap-8 px-6 pb-12 pt-6 md:grid-cols-2 md:gap-10 md:px-10 md:pb-16 md:pt-8 lg:gap-12 lg:px-16 lg:pb-20 lg:pt-10">
-      <div class="relative z-20 max-w-xl">
-        <h1 class="font-display text-[2.6rem] font-extrabold leading-[1.05] tracking-tight text-ink sm:text-5xl md:text-[3.4rem] lg:text-[4rem]">
-          <span v-html="heroTitle.replace(' livrée ', '<br />livrée ')" />
+      <div
+        class="relative z-10 mx-auto flex min-h-[78dvh] max-w-[900px] flex-col items-center justify-center px-6 pb-24 pt-10 text-center text-white sm:min-h-[88dvh]"
+      >
+        <p class="hero-fade mb-3 font-display text-3xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl">
+          {{ brandName }}
+        </p>
+        <p
+          class="hero-fade hero-fade-delay-1 mb-4 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/80"
+        >
+          Viande fraîche · Dakar
+        </p>
+        <h1
+          class="hero-fade hero-fade-delay-2 max-w-2xl font-display text-[1.75rem] font-extrabold leading-[1.1] tracking-tight sm:text-4xl md:text-5xl"
+        >
+          {{ heroTitle }}
         </h1>
-
-        <p class="mt-5 text-base text-ink/70 sm:text-lg">
+        <p
+          class="hero-fade hero-fade-delay-3 mt-5 max-w-md text-sm leading-relaxed text-white/85 sm:text-base"
+        >
           {{ heroSubtitle }}
         </p>
-
-        <div class="mt-8 sm:mt-10">
+        <div class="hero-fade hero-fade-delay-4 mt-10">
           <NuxtLink
             to="/commander"
-            class="inline-flex items-center justify-center rounded-full bg-brand px-9 py-3.5 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-[0_10px_30px_rgba(200,16,46,0.28)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+            class="group inline-flex min-w-[200px] items-center justify-center gap-2 bg-white px-10 py-3.5 text-[11px] font-bold uppercase tracking-[0.18em] text-brand transition duration-300 hover:bg-brand hover:text-white"
           >
             {{ ctaLabel }}
+            <PhArrowRight
+              :size="14"
+              weight="bold"
+              class="transition-transform group-hover:translate-x-1"
+            />
           </NuxtLink>
-        </div>
-      </div>
-
-      <div class="relative mx-auto grid w-full max-w-[560px] grid-cols-2 gap-3 sm:gap-4 md:max-w-none md:grid-cols-3 md:gap-3 lg:gap-4">
-        <div
-          v-for="item in collage"
-          :key="item.src"
-          :class="`${item.wrap} transition-transform hover:-translate-y-1 hover:scale-[1.02]`"
-        >
-          <img
-            :src="item.src"
-            :alt="item.alt"
-            :class="item.img"
-            class="animate-float"
-            :style="{ animationDelay: item.delay }"
-          />
         </div>
       </div>
     </section>
 
-    <div class="relative z-30 flex h-3 w-full sm:h-4">
-      <div class="w-1/2 bg-[#1a1a1a]" />
-      <div class="w-1/2 bg-brand" />
+    <!-- Marquee -->
+    <div
+      class="relative z-10 -mt-8 overflow-hidden border-y border-ink/10 bg-white/90 py-3 backdrop-blur-md"
+      aria-hidden="true"
+    >
+      <div class="marquee-track gap-10 px-6 text-[11px] font-semibold uppercase tracking-[0.22em] text-ink/50">
+        <template v-for="pass in 2" :key="pass">
+          <span
+            v-for="(item, i) in marqueeItems"
+            :key="`${pass}-${i}`"
+            class="inline-flex items-center gap-10 whitespace-nowrap"
+          >
+            {{ item }}
+            <span class="text-brand">●</span>
+          </span>
+        </template>
+      </div>
     </div>
+
+    <!-- Category bento -->
+    <section class="mx-auto max-w-[1400px] px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <div class="reveal mb-10 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-brand">
+            Nos univers
+          </p>
+          <h2 class="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+            Choisissez votre fraîcheur
+          </h2>
+        </div>
+        <NuxtLink
+          to="/commander"
+          class="group inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-ink/60 transition hover:text-brand"
+        >
+          Voir le catalogue
+          <PhCaretRight
+            :size="14"
+            weight="bold"
+            class="transition-transform group-hover:translate-x-0.5"
+          />
+        </NuxtLink>
+      </div>
+
+      <div
+        class="grid auto-rows-[210px] gap-3 sm:auto-rows-[240px] sm:grid-cols-2 lg:auto-rows-[260px] lg:grid-cols-4 lg:gap-4"
+      >
+        <NuxtLink
+          v-for="(cat, idx) in categories"
+          :key="cat.id"
+          :to="cat.to"
+          class="reveal group relative overflow-hidden rounded-2xl"
+          :class="[
+            cat.featured ? 'sm:col-span-2 sm:row-span-2 min-h-[280px] sm:min-h-0' : '',
+            `reveal-delay-${(idx % 3) + 1}`,
+          ]"
+        >
+          <img
+            :src="cat.image"
+            :alt="cat.label"
+            loading="lazy"
+            class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
+          />
+          <div
+            class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent"
+            aria-hidden="true"
+          />
+          <div class="absolute inset-x-0 bottom-0 p-5 text-white sm:p-6">
+            <h3
+              class="font-display font-bold leading-tight"
+              :class="cat.featured ? 'text-3xl sm:text-4xl' : 'text-2xl'"
+            >
+              {{ cat.label }}
+            </h3>
+            <p class="mt-1 text-xs text-white/80 sm:text-sm">{{ cat.text }}</p>
+            <span
+              class="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] transition group-hover:gap-2.5"
+            >
+              Commander
+              <PhArrowRight :size="12" weight="bold" />
+            </span>
+          </div>
+        </NuxtLink>
+      </div>
+    </section>
+
+    <!-- Trust / delivery strip -->
+    <section class="reveal bg-ink text-white">
+      <div class="mx-auto grid max-w-[1400px] gap-8 px-4 py-14 sm:grid-cols-3 sm:px-6 sm:py-16 lg:px-8">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">
+            Fraîcheur
+          </p>
+          <h3 class="mt-2 font-display text-2xl font-bold">Du jour, chez vous</h3>
+          <p class="mt-2 text-sm text-white/65">
+            Produits préparés pour une qualité constante, livraison rapide à Dakar.
+          </p>
+        </div>
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">
+            Simple
+          </p>
+          <h3 class="mt-2 font-display text-2xl font-bold">Commandez en ligne</h3>
+          <p class="mt-2 text-sm text-white/65">
+            Catalogue clair, panier rapide, suivi de livraison en direct.
+          </p>
+        </div>
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">
+            Fidélité
+          </p>
+          <h3 class="mt-2 font-display text-2xl font-bold">Gagnez des points</h3>
+          <p class="mt-2 text-sm text-white/65">
+            Chaque commande vous rapproche d’avantages exclusifs.
+          </p>
+        </div>
+      </div>
+      <div class="border-t border-white/10 px-4 py-8 text-center sm:px-6">
+        <NuxtLink
+          to="/commander"
+          class="group inline-flex items-center gap-2 bg-brand px-10 py-3.5 text-[11px] font-bold uppercase tracking-[0.18em] text-white transition hover:bg-white hover:text-brand"
+        >
+          {{ ctaLabel }}
+          <PhArrowRight
+            :size="14"
+            weight="bold"
+            class="transition-transform group-hover:translate-x-1"
+          />
+        </NuxtLink>
+      </div>
+    </section>
+
+    <SiteFooter
+      :brand-name="brandName"
+      :phone="contact.phone"
+      :whatsapp="contact.whatsapp"
+      :email="contact.email"
+    />
 
     <CartDrawer />
     <CheckoutModal />
@@ -204,17 +389,51 @@ const collage = [
 </template>
 
 <style scoped>
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
+.hero-media {
+  animation: hero-zoom 14s ease-out forwards;
+}
+
+.hero-fade {
+  animation: hero-rise 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero-fade-delay-1 {
+  animation-delay: 0.1s;
+}
+.hero-fade-delay-2 {
+  animation-delay: 0.2s;
+}
+.hero-fade-delay-3 {
+  animation-delay: 0.3s;
+}
+.hero-fade-delay-4 {
+  animation-delay: 0.42s;
+}
+
+@keyframes hero-zoom {
+  from {
+    transform: scale(1.08);
   }
-  50% {
-    transform: translateY(-10px);
+  to {
+    transform: scale(1);
   }
 }
 
-.animate-float {
-  animation: float 3s ease-in-out infinite;
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-media,
+  .hero-fade {
+    animation: none;
+  }
 }
 </style>
